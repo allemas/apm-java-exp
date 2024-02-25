@@ -11,8 +11,6 @@ import java.util.Optional;
 
 public class AgentVMMonitor {
     static final Logger logger = LoggerFactory.getLogger(AgentVMMonitor.class);
-
-
     private static final String jarFilePath = "C:\\Users\\sebas\\Documents\\apm\\apm\\apm-agent\\target\\apm-agent-1.0-SNAPSHOT-jar-with-dependencies.jar";
 
 

@@ -8,6 +8,10 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.lang.instrument.Instrumentation;
 import java.lang.instrument.UnmodifiableClassException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
 
 public class Premain {
     private static Logger logger = LoggerFactory.getLogger(Premain.class.getName());
@@ -25,26 +29,76 @@ public class Premain {
      * @throws Exception
      */
     public static void agentmain(String args, Instrumentation inst) {
-        logger.info("AGENT : Starting...");
-        String classNameTransform = "org.example.utils.SleepClass";
-        Class<?> targetCls = null;
 
-        try {
-            targetCls = Class.forName(classNameTransform);
-            ClassLoader targetClassLoader = targetCls.getClassLoader();
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                logger.info("AGENT : Starting...");
+                String classNameTransform = "org.example.utils.SleepClass";
+                Class<?> targetCls = null;
 
-            logger.info("AGENT : Transformer Starting...");
-            ATMTransformer dt = new ATMTransformer(
-                    targetCls.getName(), targetClassLoader);
+                try {
+                    targetCls = Class.forName(classNameTransform);
+                    ClassLoader targetClassLoader = targetCls.getClassLoader();
 
-            inst.addTransformer(dt, true);
-            inst.retransformClasses(targetCls);
+                    logger.info("AGENT : Transformer Starting...");
+                    ATMTransformer dt = new ATMTransformer(
+                            targetCls.getName(), targetClassLoader);
 
-            logger.info("AGENT : retransform...");
+                    inst.addTransformer(dt, true);
+                    inst.retransformClasses(targetCls);
 
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+                    /**
+                     * Remove the duration and sleep, and the profiler takes the hand on the runtime
+                     */
+                    while (true) {
+                        List<String> strace = new ArrayList<>();
+
+                        Thread.getAllStackTraces().forEach(((thread, stackTraceElements) ->
+                        {
+                            List<String> trace = Stream.of(stackTraceElements).map(
+                                    (stackTraceElement -> (stackTraceElement.getClassName() + "." + stackTraceElement.getMethodName()).intern())
+                            ).toList();
+
+                            strace.addAll(trace);
+                        }));
+                        logger.info("AGENT APM Stacktace: " + strace);
+
+                        Thread.sleep(1000);
+
+                    }
+
+
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+        t.setDaemon(true);
+        t.setName("stacktrance");
+        t.start();
+
+        Thread jmxMetrics = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    long heapMemory = Runtime.getRuntime().availableProcessors();
+                    long heapMemory2 = Runtime.getRuntime().freeMemory();
+
+                    logger.info("AGENT APM : JMX processors available : " + heapMemory + " and freememory is : "+heapMemory2);
+                    try {
+                        Thread.sleep(1200);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+
+            }
+        });
+
+        jmxMetrics.setDaemon(true);
+        jmxMetrics.setName("profiler");
+        jmxMetrics.start();
 
 
     }
@@ -78,3 +132,4 @@ public class Premain {
     }
 
 }
+//https://github.com/parttimenerd/tiny-profiler/tree/main
